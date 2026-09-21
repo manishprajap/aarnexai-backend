@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Connect WhatsApp</title>
+  <style>
+    body { margin:0; font-family:Arial,sans-serif; background:#f7fafc; color:#0F2A4A; }
+    .wrap { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; box-sizing:border-box; }
+    .card { width:100%; max-width:420px; background:#fff; border:1px solid #E1E8EE; border-radius:18px; padding:28px; box-shadow:0 8px 30px rgba(15,42,74,.08); text-align:center; }
+    h1 { font-size:22px; margin:0 0 10px; }
+    p { color:#5A6B7B; font-size:14px; line-height:1.5; }
+    button { width:100%; border:0; border-radius:12px; padding:14px 18px; font-size:15px; font-weight:700; cursor:pointer; margin-top:14px; }
+    .primary { background:#1877F2; color:#fff; }
+    .secondary { background:#EAF1FB; color:#1877F2; }
+    button:disabled { opacity:.6; cursor:not-allowed; }
+    .status { margin-top:16px; font-size:13px; }
+    .error { color:#c62828; }
+    .success { color:#2e7d32; }
+    .hidden { display:none; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Connect WhatsApp</h1>
+      <p id="description">
+        Connect your WhatsApp Business account with Meta to publish your posters.
+      </p>
+
+      <button id="connectBtn" class="primary" type="button">Continue with Meta</button>
+
+      <div id="afterConnect" class="hidden">
+        <p>
+          After you finish connecting on the Meta page, come back here and tap
+          the button below to return to the app.
+        </p>
+        <button id="doneBtn" class="secondary" type="button">I've connected — Return to app</button>
+      </div>
+
+      <div id="status" class="status"></div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const params = new URLSearchParams(window.location.search);
+      const sessionId = params.get('session');
+      const appId = params.get('app_id');
+      const configId = params.get('config_id');
+
+      const connectBtn = document.getElementById('connectBtn');
+      const doneBtn = document.getElementById('doneBtn');
+      const afterConnect = document.getElementById('afterConnect');
+      const status = document.getElementById('status');
+
+      function setStatus(message, type) {
+        status.className = 'status ' + (type || '');
+        status.textContent = message;
+      }
+
+      function redirectToApp(statusValue, message) {
+        const callback = new URL('aarnamarket://whatsapp-callback');
+        callback.searchParams.set('session', sessionId || '');
+        callback.searchParams.set('status', statusValue);
+        if (message) callback.searchParams.set('message', message);
+        window.location.href = callback.toString();
+      }
+
+      if (!sessionId || !appId || !configId) {
+        connectBtn.disabled = true;
+        setStatus('Invalid WhatsApp connection link.', 'error');
+        return;
+      }
+
+      // Meta-hosted Embedded Signup landing page.
+      // Generated from: Meta App Dashboard → Become Tech Provider →
+      // "Meta-hosted embedded signup" → Generate link
+      const metaHostedUrl =
+        'https://business.facebook.com/messaging/whatsapp/onboard/' +
+        '?app_id=' + encodeURIComponent(appId) +
+        '&config_id=' + encodeURIComponent(configId);
+
+      connectBtn.addEventListener('click', function () {
+        setStatus('Opening Meta\u2019s WhatsApp signup page in a new tab\u2026', '');
+        window.open(metaHostedUrl, '_blank', 'noopener');
+        connectBtn.classList.add('hidden');
+        afterConnect.classList.remove('hidden');
+      });
+
+      doneBtn.addEventListener('click', function () {
+        setStatus('Returning to the app\u2026', 'success');
+        setTimeout(function () {
+          redirectToApp('pending', 'Awaiting webhook confirmation.');
+        }, 400);
+      });
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,48 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1788847991366,
+      "tag": "0000_strange_xavin",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1788855110912,
+      "tag": "0001_yielding_nitro",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1788855461873,
+      "tag": "0002_rare_king_bedlam",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1788871396681,
+      "tag": "0003_red_star_brand",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1788945485405,
+      "tag": "0004_marvelous_bloodaxe",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1789996800000,
+      "tag": "0005_google_business",
+      "breakpoints": true
+    }
+  ]
+}
