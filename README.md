@@ -70,6 +70,8 @@ Register these exact redirect URLs in each provider application:
 
 Enable YouTube Data API v3 and Google Analytics Data API in Google Cloud. The YouTube connection requests upload and read-only YouTube Analytics scopes. In Google Analytics, add the Google account as a Viewer or Analyst on the GA4 property. For LinkedIn, enable Sign In with LinkedIn using OpenID Connect and the Share on LinkedIn product if the application will publish posts. The LinkedIn connection requests `openid profile email w_member_social`.
 
+You may use the same Google OAuth Web Client ID and secret from `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` for Google Business, YouTube, YouTube Analytics, and Google Analytics 4. Register all Google callback URLs under that same OAuth client. The YouTube and Google Analytics routes fall back to these shared variables when provider-specific variables are not set.
+
 Authenticated API endpoints:
 
 - `POST /api/youtube/connect` -> returns `{ "redirectUrl": "..." }`

@@ -27,8 +27,8 @@ export async function GET(request: NextRequest) {
   const stateData = verifySocialOAuthState(state, 'google_analytics');
   if (!stateData) return redirectToFrontend('error', 'invalid_or_expired_state');
 
-  const clientId = process.env.GOOGLE_ANALYTICS_CLIENT_ID || process.env.GOOGLE_CLIENT_ID;
-  const clientSecret = process.env.GOOGLE_ANALYTICS_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET;
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   const redirectUri = process.env.GOOGLE_ANALYTICS_REDIRECT_URI;
 
   if (!clientId || !clientSecret || !redirectUri) {
