@@ -1,3 +1,4 @@
+//src/app/api/youtube/connect/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 
 import { AuthError, getUserIdFromRequest } from '@/lib/auth';
@@ -7,11 +8,18 @@ export async function POST(request: NextRequest) {
   try {
     const userId = getUserIdFromRequest(request);
     const clientId = process.env.GOOGLE_CLIENT_ID;
-    const redirectUri = process.env.YOUTUBE_REDIRECT_URI;
+    const redirectUri =
+      process.env.YOUTUBE_REDIRECT_URI ||
+      `${process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, '')}/youtube/callback`;
 
     if (!clientId || !redirectUri) {
+      const missing = [
+        !clientId && 'GOOGLE_CLIENT_ID',
+        !redirectUri && 'YOUTUBE_REDIRECT_URI or NEXT_PUBLIC_API_URL',
+      ].filter(Boolean).join(', ');
+
       return NextResponse.json(
-        { success: false, message: 'YouTube OAuth is not configured' },
+        { success: false, message: `YouTube OAuth is not configured: ${missing}` },
         { status: 500 }
       );
     }

@@ -1,3 +1,4 @@
+///src/app/api/youtube/analytics/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { and, eq } from 'drizzle-orm';
 

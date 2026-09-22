@@ -1,3 +1,4 @@
+///src/app/api/youtube/callback/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { and, eq } from 'drizzle-orm';
 
@@ -33,7 +34,9 @@ export async function GET(request: NextRequest) {
 
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-  const redirectUri = process.env.YOUTUBE_REDIRECT_URI;
+  const redirectUri =
+    process.env.YOUTUBE_REDIRECT_URI ||
+    `${process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, '')}/youtube/callback`;
 
   if (!clientId || !clientSecret || !redirectUri) {
     return redirectToFrontend('error', 'youtube_oauth_not_configured');
