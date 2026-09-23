@@ -1,4 +1,5 @@
 // src/app/api/banners/publish/route.ts
+// src/app/api/banners/publish/route.ts
 
 import { NextRequest, NextResponse } from 'next/server';
 import path from 'path';
@@ -13,8 +14,6 @@ import {
   whatsappConnections,
   whatsappContacts,
   products,
-  socialAccounts,
-  bannerPublications,
 } from '@/db/schema';
 
 import { eq, and } from 'drizzle-orm';
@@ -49,12 +48,6 @@ const FB_GRAPH_API_BASE =
 
 const WA_GRAPH_API_BASE =
   `https://graph.facebook.com/${META_GRAPH_VERSION}`;
-
-const GOOGLE_BUSINESS_API_BASE = 'https://mybusiness.googleapis.com/v4';
-const GOOGLE_BUSINESS_ACCOUNT_API_BASE = 'https://mybusinessaccountmanagement.googleapis.com/v1';
-const GOOGLE_BUSINESS_INFORMATION_API_BASE = 'https://mybusinessbusinessinformation.googleapis.com/v1';
-
-const LINKEDIN_API_BASE = 'https://api.linkedin.com/v2';
 
 const UPLOAD_ROOT =
   process.env.UPLOAD_ROOT ||
@@ -135,36 +128,6 @@ function getMetaErrorMessage(
     data?.message ||
     fallback
   );
-}
-
-
-// Records that a banner was published somewhere, so the analytics
-// endpoint (src/app/api/banners/analytics/route.ts) can look up the
-// external post ID later and pull impressions/clicks/reach for it.
-// Best-effort — never let a logging failure fail the publish itself.
-async function recordBannerPublication(params: {
-  bannerId: number | string;
-  userId: number;
-  platform: string;
-  externalId: string;
-  permalink?: string | null;
-}) {
-  const { bannerId, userId, platform, externalId, permalink } = params;
-
-  try {
-    await db.insert(bannerPublications).values({
-      bannerId: Number(bannerId),
-      userId,
-      platform,
-      externalId,
-      permalink: permalink || null,
-      publishedAt: new Date(),
-    });
-  } catch (error) {
-    console.error('[Publish] Failed to record bannerPublications row:', {
-      bannerId, platform, error,
-    });
-  }
 }
 
 
@@ -487,218 +450,6 @@ async function publishToWhatsappContacts(params: {
 
 
 /* =========================================================
-   GOOGLE BUSINESS PUBLISHING (Business Profile "local post")
-========================================================= */
-
-async function publishToGoogleBusiness(params: {
-  accountId: string;
-  locationId: string;
-  accessToken: string;
-  imageUrl: string;
-  caption: string;
-}) {
-
-  const { accountId, locationId, accessToken, imageUrl, caption } = params;
-
-  console.log('[GoogleBusiness] Creating local post', { accountId, locationId });
-
-  const url =
-    `${GOOGLE_BUSINESS_API_BASE}/accounts/${accountId}/locations/${locationId}/localPosts`;
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify({
-      languageCode: 'en-US',
-      summary: caption,
-      topicType: 'STANDARD',
-      media: [
-        {
-          mediaFormat: 'PHOTO',
-          sourceUrl: imageUrl,
-        },
-      ],
-    }),
-  });
-
-  const data = await response.json();
-
-  console.log('[GoogleBusiness] Publish response:', data);
-
-  if (!response.ok || !data.name) {
-    throw new Error(getMetaErrorMessage(data, 'Google Business post failed'));
-  }
-
-  // data.name looks like: accounts/{accountId}/locations/{locationId}/localPosts/{postId}
-  return {
-    postName: data.name as string,
-    searchUrl: (data.searchUrl as string) || null,
-  };
-}
-
-
-/* =========================================================
-   LINKEDIN PUBLISHING (UGC image post — 3 step: register,
-   upload binary, then create the post)
-========================================================= */
-
-async function registerLinkedInUpload(params: {
-  ownerUrn: string; // 'urn:li:organization:12345' or 'urn:li:person:abc'
-  accessToken: string;
-}) {
-
-  const { ownerUrn, accessToken } = params;
-
-  const response = await fetch(
-    `${LINKEDIN_API_BASE}/assets?action=registerUpload`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
-        'X-Restli-Protocol-Version': '2.0.0',
-      },
-      body: JSON.stringify({
-        registerUploadRequest: {
-          recipes: ['urn:li:digitalmediaRecipe:feedshare-image'],
-          owner: ownerUrn,
-          serviceRelationships: [
-            {
-              relationshipType: 'OWNER',
-              identifier: 'urn:li:userGeneratedContent',
-            },
-          ],
-        },
-      }),
-    }
-  );
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(getMetaErrorMessage(data, 'LinkedIn upload registration failed'));
-  }
-
-  const uploadUrl =
-    data?.value?.uploadMechanism?.[
-      'com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest'
-    ]?.uploadUrl;
-
-  const asset = data?.value?.asset;
-
-  if (!uploadUrl || !asset) {
-    throw new Error('LinkedIn did not return an upload URL for the image');
-  }
-
-  return { uploadUrl: uploadUrl as string, asset: asset as string };
-}
-
-
-async function uploadLinkedInImage(params: {
-  uploadUrl: string;
-  accessToken: string;
-  imageUrl: string;
-}) {
-
-  const { uploadUrl, accessToken, imageUrl } = params;
-
-  console.log('[LinkedIn] Downloading source image:', imageUrl);
-
-  const imageResponse = await fetch(imageUrl, { method: 'GET', cache: 'no-store' });
-
-  if (!imageResponse.ok) {
-    throw new Error(
-      `Could not download banner image for LinkedIn. HTTP ${imageResponse.status}`
-    );
-  }
-
-  const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
-
-  const uploadResponse = await fetch(uploadUrl, {
-    method: 'PUT',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/octet-stream',
-    },
-    body: imageBuffer,
-  });
-
-  if (!uploadResponse.ok) {
-    throw new Error(`LinkedIn image upload failed. HTTP ${uploadResponse.status}`);
-  }
-}
-
-
-async function publishToLinkedIn(params: {
-  ownerUrn: string; // 'urn:li:organization:12345' or 'urn:li:person:abc'
-  accessToken: string;
-  imageUrl: string;
-  caption: string;
-}) {
-
-  const { ownerUrn, accessToken, imageUrl, caption } = params;
-
-  console.log('[LinkedIn] Registering upload', { ownerUrn });
-
-  const { uploadUrl, asset } = await registerLinkedInUpload({ ownerUrn, accessToken });
-
-  console.log('[LinkedIn] Uploading image asset:', asset);
-
-  await uploadLinkedInImage({ uploadUrl, accessToken, imageUrl });
-
-  console.log('[LinkedIn] Creating UGC post');
-
-  const postResponse = await fetch(`${LINKEDIN_API_BASE}/ugcPosts`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
-      'X-Restli-Protocol-Version': '2.0.0',
-    },
-    body: JSON.stringify({
-      author: ownerUrn,
-      lifecycleState: 'PUBLISHED',
-      specificContent: {
-        'com.linkedin.ugc.ShareContent': {
-          shareCommentary: { text: caption || '' },
-          shareMediaCategory: 'IMAGE',
-          media: [
-            {
-              status: 'READY',
-              media: asset,
-            },
-          ],
-        },
-      },
-      visibility: {
-        'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC',
-      },
-    }),
-  });
-
-  const postData = await postResponse.json().catch(() => ({}));
-
-  console.log('[LinkedIn] Post response:', postData);
-
-  if (!postResponse.ok) {
-    throw new Error(getMetaErrorMessage(postData, 'LinkedIn post failed'));
-  }
-
-  // LinkedIn often returns the created post's URN in the x-restli-id
-  // response header rather than the JSON body — check both.
-  const postId: string =
-    postData?.id ||
-    postResponse.headers.get('x-restli-id') ||
-    asset;
-
-  return { postId };
-}
-
-
-/* =========================================================
    POST /api/banners/publish
 ========================================================= */
 
@@ -754,9 +505,6 @@ export async function POST(req: NextRequest) {
     const wantsInstagram = normalizedPlatforms.includes('instagram');
     const wantsFacebook = normalizedPlatforms.includes('facebook');
     const wantsWhatsapp = normalizedPlatforms.includes('whatsapp');
-    const wantsGoogleBusiness = normalizedPlatforms.includes('google_business');
-    const wantsLinkedin = normalizedPlatforms.includes('linkedin');
-    const wantsYoutube = normalizedPlatforms.includes('youtube');
 
     console.log('[Publish] Request:', { userId, bannerId, platforms: normalizedPlatforms });
 
@@ -805,8 +553,7 @@ export async function POST(req: NextRequest) {
 
 
     /* VERIFY ORIGINAL IMAGE — required by every platform, since
-       Facebook/Instagram/WhatsApp/Google Business/LinkedIn all fetch
-       this URL server-side. */
+       Facebook/Instagram/WhatsApp all fetch this URL server-side. */
 
     const imageCheck = await verifyPublicImage(originalImageUrl);
 
@@ -974,13 +721,6 @@ export async function POST(req: NextRequest) {
               imageUrl: instagramImageUrl,
             };
 
-            await recordBannerPublication({
-              bannerId,
-              userId,
-              platform: 'instagram',
-              externalId: instagramResult.mediaId,
-            });
-
           } catch (error: any) {
             console.error('[Instagram] Publishing failed:', error);
 
@@ -1057,13 +797,6 @@ export async function POST(req: NextRequest) {
               postId: facebookResult.postId,
               imageUrl: originalImageUrl,
             };
-
-            await recordBannerPublication({
-              bannerId,
-              userId,
-              platform: 'facebook',
-              externalId: facebookResult.postId,
-            });
 
             // Best-effort — don't fail the whole request if this update fails.
             try {
@@ -1181,184 +914,9 @@ export async function POST(req: NextRequest) {
               failed,
               imageUrl: originalImageUrl,
             };
-
-            // WhatsApp is a broadcast (no single "post"), so there's no
-            // externalId to look up insights for later — intentionally
-            // not recorded in bannerPublications.
           }
         }
       }
-    }
-
-
-    /* GOOGLE BUSINESS */
-
-    if (wantsGoogleBusiness) {
-
-      console.log('[GoogleBusiness] Looking for connection:', { userId });
-
-      const connection = await getGoogleBusinessConnection(userId);
-
-      console.log('[GoogleBusiness] Connection found:', !!connection);
-
-      if (!connection) {
-        results.google_business = {
-          success: false,
-          message: 'Google Business is not connected. Please connect Google Business first.',
-          requiresGoogleBusinessConnection: true,
-        };
-      } else {
-        try {
-          const { accountId, locationId, accessToken } = connection;
-          if (!accountId || !locationId || !accessToken) {
-            throw new Error('Google Business account or location is not configured');
-          }
-
-            const gbResult = await publishToGoogleBusiness({
-              accountId,
-              locationId,
-              accessToken,
-              imageUrl: originalImageUrl,
-              caption,
-            });
-
-            results.google_business = {
-              success: true,
-              postName: gbResult.postName,
-              searchUrl: gbResult.searchUrl,
-              imageUrl: originalImageUrl,
-            };
-
-            await recordBannerPublication({
-              bannerId,
-              userId,
-              platform: 'google_business',
-              externalId: gbResult.postName,
-              permalink: gbResult.searchUrl,
-            });
-
-        } catch (error: any) {
-          console.error('[GoogleBusiness] Publishing failed:', error);
-
-          results.google_business = {
-            success: false,
-            message: error?.message || 'Google Business publishing failed',
-            imageUrl: originalImageUrl,
-          };
-        }
-      }
-    }
-
-
-    /* LINKEDIN */
-
-    if (wantsLinkedin) {
-
-      console.log('[LinkedIn] Looking for connection:', { userId });
-
-      const connectionRows = await db
-        .select()
-        .from(socialAccounts)
-        .where(and(eq(socialAccounts.userId, userId), eq(socialAccounts.provider, 'linkedin')))
-        .limit(1);
-
-      const connection = connectionRows[0];
-
-      console.log('[LinkedIn] Connection found:', !!connection);
-
-      if (!connection) {
-        results.linkedin = {
-          success: false,
-          message: 'LinkedIn is not connected. Please connect LinkedIn first.',
-          requiresLinkedinConnection: true,
-        };
-      } else {
-
-        // Expect either an organization page urn (posting as the
-        // business) or a person urn (posting as the connected member).
-        // Adjust the column name to whatever you store this under.
-        const ownerUrn = String(
-          connection.providerAccountId || ''
-        ).trim();
-
-        const accessToken = String(connection.accessToken || '').trim();
-
-        if (!ownerUrn || !accessToken) {
-          results.linkedin = {
-            success: false,
-            message: 'LinkedIn connection is missing required fields',
-          };
-        } else {
-
-          try {
-            const linkedinResult = await publishToLinkedIn({
-              ownerUrn,
-              accessToken,
-              imageUrl: originalImageUrl,
-              caption,
-            });
-
-            results.linkedin = {
-              success: true,
-              postId: linkedinResult.postId,
-              imageUrl: originalImageUrl,
-            };
-
-            await recordBannerPublication({
-              bannerId,
-              userId,
-              platform: 'linkedin',
-              externalId: linkedinResult.postId,
-            });
-
-          } catch (error: any) {
-            console.error('[LinkedIn] Publishing failed:', error);
-
-            results.linkedin = {
-              success: false,
-              message: error?.message || 'LinkedIn publishing failed',
-              imageUrl: originalImageUrl,
-            };
-          }
-        }
-      }
-    }
-
-
-    /* YOUTUBE */
-
-    if (wantsYoutube) {
-
-      // IMPORTANT: the YouTube Data API has no public endpoint for
-      // posting a static image as a feed / "Community" post — Community
-      // posts can only be created from YouTube Studio / the app, not
-      // via the API. The only thing the API lets you publish is a
-      // VIDEO (videos.insert), which a marketing banner image isn't.
-      //
-      // Rather than silently doing nothing or faking success, this
-      // reports back clearly so the UI can tell the user. If/when you
-      // want YouTube support, the realistic options are:
-      //   1. Render the banner as a short video (e.g. Ken Burns pan)
-      //      and upload that with videos.insert, or
-      //   2. Drop YouTube from the "post a banner" flow entirely and
-      //      keep the connection around for analytics only.
-      console.log('[YouTube] Publish requested but not supported by the public API');
-
-      const connectionRows = await db
-        .select()
-        .from(socialAccounts)
-        .where(and(eq(socialAccounts.userId, userId), eq(socialAccounts.provider, 'youtube')))
-        .limit(1);
-
-      const connection = connectionRows[0];
-
-      results.youtube = {
-        success: false,
-        message: connection
-          ? "YouTube doesn't support publishing a static image as a public post via the API. YouTube is connected for analytics only."
-          : 'YouTube is not connected.',
-        supported: false,
-      };
     }
 
 
@@ -1440,88 +998,4 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-async function getGoogleBusinessConnection(userId: number) {
-  const [connection] = await db
-    .select({
-      accessToken: socialAccounts.accessToken,
-      refreshToken: socialAccounts.refreshToken,
-      expiresAt: socialAccounts.expiresAt,
-    })
-    .from(socialAccounts)
-    .where(
-      and(
-        eq(socialAccounts.userId, userId),
-        eq(socialAccounts.provider, 'google_business')
-      )
-    )
-    .limit(1);
-
-  if (!connection?.accessToken) return null;
-
-  let accessToken = connection.accessToken;
-  if (connection.expiresAt && connection.expiresAt.getTime() <= Date.now() + 60_000) {
-    if (!connection.refreshToken || !process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
-      throw new Error('Google Business access token has expired. Please reconnect Google Business.');
-    }
-
-    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id: process.env.GOOGLE_CLIENT_ID,
-        client_secret: process.env.GOOGLE_CLIENT_SECRET,
-        refresh_token: connection.refreshToken,
-        grant_type: 'refresh_token',
-      }),
-      cache: 'no-store',
-    });
-    const tokenData = await tokenResponse.json();
-    if (!tokenResponse.ok || !tokenData.access_token) {
-      throw new Error(getMetaErrorMessage(tokenData, 'Unable to refresh Google Business access token'));
-    }
-
-    accessToken = tokenData.access_token;
-    await db
-      .update(socialAccounts)
-      .set({
-        accessToken,
-        expiresAt: tokenData.expires_in
-          ? new Date(Date.now() + tokenData.expires_in * 1000)
-          : null,
-      })
-      .where(
-        and(
-          eq(socialAccounts.userId, userId),
-          eq(socialAccounts.provider, 'google_business')
-        )
-      );
-  }
-
-  const accountsResponse = await fetch(`${GOOGLE_BUSINESS_ACCOUNT_API_BASE}/accounts`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-    cache: 'no-store',
-  });
-  const accountsData = await accountsResponse.json();
-  if (!accountsResponse.ok || !accountsData.accounts?.[0]?.name) {
-    throw new Error(getMetaErrorMessage(accountsData, 'Unable to list Google Business accounts'));
-  }
-
-  const accountName = accountsData.accounts[0].name as string;
-  const accountId = accountName.split('/').pop();
-  const locationsResponse = await fetch(
-    `${GOOGLE_BUSINESS_INFORMATION_API_BASE}/${accountName}/locations?pageSize=100`,
-    { headers: { Authorization: `Bearer ${accessToken}` }, cache: 'no-store' }
-  );
-  const locationsData = await locationsResponse.json();
-  if (!locationsResponse.ok || !locationsData.locations?.[0]?.name) {
-    throw new Error(getMetaErrorMessage(locationsData, 'No Google Business location was found'));
-  }
-
-  return {
-    accessToken,
-    accountId,
-    locationId: locationsData.locations[0].name.split('/').pop() as string,
-  };
 }

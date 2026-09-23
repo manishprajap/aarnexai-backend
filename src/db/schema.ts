@@ -134,6 +134,22 @@ export const banners = mysqlTable('banners', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
+export const bannerPublications = mysqlTable(
+  'banner_publications',
+  {
+    id: int('id').autoincrement().primaryKey(),
+    bannerId: int('banner_id').notNull().references(() => banners.id, { onDelete: 'cascade' }),
+    userId: int('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    platform: varchar('platform', { length: 40 }).notNull(),
+    externalId: varchar('external_id', { length: 500 }).notNull(),
+    permalink: varchar('permalink', { length: 1000 }),
+    publishedAt: timestamp('published_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    userBannerIndex: index('idx_banner_publications_user_banner').on(table.userId, table.bannerId),
+  })
+);
+
 // Added `durationDays` so the subscription API knows how long a purchased
 // plan period should last (used to compute a subscription's `endDate`).
 export const plans = mysqlTable('plans', {
