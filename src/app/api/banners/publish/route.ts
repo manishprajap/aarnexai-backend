@@ -1505,23 +1505,39 @@ async function getGoogleBusinessConnection(userId: number) {
   });
   const accountsData = await accountsResponse.json();
   if (!accountsResponse.ok || !accountsData.accounts?.[0]?.name) {
-    throw new Error(getMetaErrorMessage(accountsData, 'Unable to list Google Business accounts'));
+    throw new Error(
+      getMetaErrorMessage(
+        accountsData,
+        'No Google Business Profile account is available for this Google user. Ensure the account has a verified Business Profile and the business.manage scope.'
+      )
+    );
   }
 
   const accountName = accountsData.accounts[0].name as string;
-  const accountId = accountName.split('/').pop();
+  const accountId = accountName.replace(/^accounts\//, '').trim();
   const locationsResponse = await fetch(
     `${GOOGLE_BUSINESS_INFORMATION_API_BASE}/${accountName}/locations?pageSize=100`,
     { headers: { Authorization: `Bearer ${accessToken}` }, cache: 'no-store' }
   );
   const locationsData = await locationsResponse.json();
   if (!locationsResponse.ok || !locationsData.locations?.[0]?.name) {
-    throw new Error(getMetaErrorMessage(locationsData, 'No Google Business location was found'));
+    throw new Error(
+      getMetaErrorMessage(
+        locationsData,
+        'No Google Business location was found for this account. Verify the location in Google Business Profile and reconnect Google Business.'
+      )
+    );
+  }
+
+  const locationName = locationsData.locations[0].name as string;
+  const locationId = locationName.replace(/^accounts\/[^/]+\/locations\//, '').trim();
+  if (!accountId || !locationId) {
+    throw new Error('Google Business returned an invalid account or location identifier');
   }
 
   return {
     accessToken,
     accountId,
-    locationId: locationsData.locations[0].name.split('/').pop() as string,
+    locationId,
   };
 }
