@@ -53,6 +53,7 @@ const WA_GRAPH_API_BASE =
 const GOOGLE_BUSINESS_API_BASE = 'https://mybusiness.googleapis.com/v4';
 const GOOGLE_BUSINESS_ACCOUNT_API_BASE = 'https://mybusinessaccountmanagement.googleapis.com/v1';
 const GOOGLE_BUSINESS_INFORMATION_API_BASE = 'https://mybusinessbusinessinformation.googleapis.com/v1';
+const PUBLISH_ROUTE_VERSION = '2026-09-23-location-lookup';
 
 const LINKEDIN_API_BASE = 'https://api.linkedin.com/v2';
 
@@ -1376,6 +1377,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
+          routeVersion: PUBLISH_ROUTE_VERSION,
           message: 'No platform was successfully published',
           bannerId,
           results,
@@ -1411,6 +1413,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(
       {
+      routeVersion: PUBLISH_ROUTE_VERSION,
         success: failedPlatforms.length === 0,
         message:
           failedPlatforms.length === 0

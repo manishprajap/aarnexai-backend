@@ -38,6 +38,19 @@ FRONTEND_URL=https://your-domain.com
 ```
 
 Apply the `drizzle/0005_google_business.sql` migration, then enable the Business Profile API, My Business Account Management API, and the exact callback URL in Google Cloud Console. The callback stores tokens only in the server database; they are never returned by the status endpoint.
+
+### Production rollout
+
+The publish route resolves the Google Business account and location live from Google. It does not read `social_accounts.metadata` or require a manually backfilled `locationId`. After pulling the current `main` branch, run:
+
+```bash
+npm ci
+npx drizzle-kit migrate
+npm run build
+pm2 restart aarnexai-backend --update-env
+```
+
+The publish response includes `routeVersion: "2026-09-23-location-lookup"`. If the response still contains the old `missing a locationId in metadata` message or does not include this field, the running process has not loaded the current build.
 ## YouTube and LinkedIn OAuth
 
 Create the OAuth applications in Google Cloud Console and the LinkedIn Developer Portal. Client secrets are provider-issued credentials and must not be committed or returned by an API response.
